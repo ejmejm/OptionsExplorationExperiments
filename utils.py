@@ -9,11 +9,71 @@ from gym_minigrid.wrappers import *
 
 ### Environment Fucntions ###
 
+class CardinalActionWrapper(gym.Wrapper):
+    """
+    Changes the actions to be cardinal directions
+    from turning and moving forward.
+    """
+
+    # Mapping from action idx to target direction
+    act_dir_map = {
+        0: 3
+    }
+
+    def __init__(self, env):
+        super().__init__(env)
+
+        # 4 actions: up, down, left, right
+        self.action_space = gym.spaces.Discrete(4)
+        # Take out the agent direction from the observation
+        self.observation_space.spaces['image'] = spaces.Box(
+            low=0,
+            high=255,
+            shape=(self.env.width, self.env.height, 2),  # number of cells
+            dtype='uint8'
+        )
+
+    def action(self, action):
+        # Old actions
+        #   0: turns counter-clockwise
+        #   1: turns clockwise
+        #   2: moves forward
+        #   3-6: does nothing
+        #
+        # New actions
+        #   0: right
+        #   1: down
+        #   2: left
+        #   3: up
+        if action < 0 or action > 3:
+            raise ValueError('Action must be between 0 and 3')
+
+        while self.env.unwrapped.agent_dir != action:
+            self.env.unwrapped.step_count -= 1
+            self.env.unwrapped.step(0)
+
+        return 2
+
+    def observation(self, obs):
+        obs['image'] = obs['image'][:, :, :2]
+        return obs
+
+    def step(self, action):
+        action = self.action(action)
+        next_obs, reward, done, info = self.env.step(action)
+        next_obs = self.observation(next_obs)
+        return next_obs, reward, done, info
+
+    def reset(self):
+        obs = self.env.reset()
+        return self.observation(obs)
+
 def make_env(max_steps=100):
     env = gym.make('MiniGrid-FourRooms-v0')
     env.max_steps = max_steps
     # env.env.max_steps = max_steps
     env = FullyObsWrapper(env) # Get pixel observations
+    env = CardinalActionWrapper(env) # Change actions to cardinal directions
     env = ImgObsWrapper(env) # Get rid of the 'mission' field
     return env
 
